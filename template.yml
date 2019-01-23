@@ -157,7 +157,7 @@ Resources:
                   application/json: |
                     #set($inputRoot = $input.path('$'))
                     {
-                      "body": $input.json('$'),
+                      "body": $input.body,
                       "shopify_hmac": "$input.params('X-Shopify-Hmac-Sha256')"
                     }
                 passthroughBehavior: never
@@ -183,7 +183,7 @@ Resources:
                   application/json: |
                     #set($inputRoot = $input.path('$'))
                     {
-                      "body": $input.json('$'),
+                      "body": $input.body,
                       "shopify_hmac": "$input.params('X-Shopify-Hmac-Sha256')"
                     }
                 passthroughBehavior: never
