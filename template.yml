@@ -1,0 +1,229 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  HandleCartEventFunctionName:
+    Type: String
+    Default: handle-shopify-cart-event
+  HandleCheckoutEventFunctionName:
+    Type: String
+    Default: handle-shopify-checkout-event
+  DataLakeS3Bucket:
+    Type: String
+  ShopifyAthenticationKey:
+    Type: String
+    NoEcho: true
+  LambdaRoleName:
+    Type: String
+    Default: shopify-data-lake-lambda
+  FirehoseRoleName:
+    Type: String
+    Default: shopify-data-lake-firehose
+  ApiGatewayRoleName:
+    Type: String
+    Default: shopify-data-lake-api-gateway
+  CartFirehoseName:
+    Type: String
+    Default: shopify-carts
+  CheckoutFirehoseName:
+    Type: String
+    Default: shopify-checkouts
+  ApiName:
+    Type: String
+    Default: shopify-data
+  ApiStageName:
+    Type: String
+    Default: prod
+
+Globals:
+  Function:
+    Runtime: python3.7
+    Timeout: 60
+    MemorySize: 128
+    Handler: handle_event.lambda_handler
+    CodeUri: .
+
+Resources:
+  FirehoseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref FirehoseRoleName
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: AllowS3Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+            - Effect: Allow
+              Action:
+                - s3:AbortMultipartUpload
+                - s3:GetBucketLocation
+                - s3:GetObject
+                - s3:ListBucket
+                - s3:ListBucketMultipartUploads
+                - s3:PutObject
+              Resource:
+                - !Sub arn:aws:s3:::${DataLakeS3Bucket}
+                - !Sub arn:aws:s3:::${DataLakeS3Bucket}/*
+
+  CartFirehose:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      DeliveryStreamName: !Ref CartFirehoseName
+      DeliveryStreamType: DirectPut
+      S3DestinationConfiguration:
+        BucketARN: !Sub arn:aws:s3:::${DataLakeS3Bucket}
+        BufferingHints:
+          IntervalInSeconds: 60
+          SizeInMBs: 128
+        CompressionFormat: UNCOMPRESSED
+        Prefix: cart/
+        RoleARN: !GetAtt FirehoseRole.Arn
+  CheckoutFirehose:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      DeliveryStreamName: !Ref CheckoutFirehoseName
+      DeliveryStreamType: DirectPut
+      S3DestinationConfiguration:
+        BucketARN: !Sub arn:aws:s3:::${DataLakeS3Bucket}
+        BufferingHints:
+          IntervalInSeconds: 60
+          SizeInMBs: 128
+        CompressionFormat: UNCOMPRESSED
+        Prefix: checkout/
+        RoleARN: !GetAtt FirehoseRole.Arn
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref LambdaRoleName
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: AllowFirehosePutRecord
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+            - Effect: Allow
+              Action: firehose:PutRecord
+              Resource:
+                - !GetAtt CartFirehose.Arn
+                - !GetAtt CheckoutFirehose.Arn
+
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Ref ApiName
+      StageName: !Ref ApiStageName
+      DefinitionBody:
+        swagger: 2.0
+        info:
+          title: Handle Shopify webhooks.
+        paths:
+          /cart:
+            post:
+              produces:
+                - application/json
+              responses:
+                '200':
+                  description: 200 response
+                  schema:
+                    $ref: '#/definitions/Empty'
+              x-amazon-apigateway-integration:
+                uri: !Sub arn:aws:apigateway:ca-central-1:lambda:path/2015-03-31/functions/${HandleCartEventFunction.Arn}/invocations
+                responses:
+                  default:
+                    statusCode: 200
+                httpMethod: POST
+                requestParameters:
+                  integration.request.header.X-Amz-Invocation-Type: "'Event'"
+                requestTemplates:
+                  application/json: |
+                    #set($inputRoot = $input.path('$'))
+                    {
+                      "body": $input.json('$'),
+                      "shopify_hmac": "$input.params('X-Shopify-Hmac-Sha256')"
+                    }
+                passthroughBehavior: never
+                type: aws
+          /checkout:
+            post:
+              produces:
+                - application/json
+              responses:
+                '200':
+                  description: 200 response
+                  schema:
+                    $ref: '#/definitions/Empty'
+              x-amazon-apigateway-integration:
+                uri: !Sub arn:aws:apigateway:ca-central-1:lambda:path/2015-03-31/functions/${HandleCheckoutEventFunction.Arn}/invocations
+                responses:
+                  default:
+                    statusCode: 200
+                httpMethod: POST
+                requestParameters:
+                  integration.request.header.X-Amz-Invocation-Type: "'Event'"
+                requestTemplates:
+                  application/json: |
+                    #set($inputRoot = $input.path('$'))
+                    {
+                      "body": $input.json('$'),
+                      "shopify_hmac": "$input.params('X-Shopify-Hmac-Sha256')"
+                    }
+                passthroughBehavior: never
+                type: aws
+        definitions:
+          Empty:
+            type: object
+            title: Empty Schema
+
+  HandleCartEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Ref HandleCartEventFunctionName
+      CodeUri: .
+      Role: !GetAtt LambdaRole.Arn
+      Environment:
+        Variables:
+          KINESIS_FIREHOSE: !Ref CartFirehose
+          SHOPIFY_AUTHENTICATION_KEY: !Ref ShopifyAthenticationKey
+      Events:
+        CartEvent:
+          Type: Api
+          Properties:
+            Path: /cart
+            Method: post
+            RestApiId: !Ref Api
+
+  HandleCheckoutEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Ref HandleCheckoutEventFunctionName
+      Role: !GetAtt LambdaRole.Arn
+      Environment:
+        Variables:
+          KINESIS_FIREHOSE: !Ref CheckoutFirehose
+          SHOPIFY_AUTHENTICATION_KEY: !Ref ShopifyAthenticationKey
+      Events:
+        CheckoutEvent:
+          Type: Api
+          Properties:
+            Path: /checkout
+            Method: post
+            RestApiId: !Ref Api
