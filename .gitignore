@@ -1,6 +1,9 @@
 # MacOS
 .DS_Store
 
+# Pycharm
+.idea/
+
 # AWS SAM artifacts
 .aws-sam/
 
