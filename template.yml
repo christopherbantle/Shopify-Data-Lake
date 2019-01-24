@@ -154,10 +154,11 @@ Resources:
                 requestParameters:
                   integration.request.header.X-Amz-Invocation-Type: "'Event'"
                 requestTemplates:
+                  # See here for explanation of body function: https://forums.aws.amazon.com/thread.jspa?threadID=228067
                   application/json: |
                     #set($inputRoot = $input.path('$'))
                     {
-                      "body": $input.body,
+                      "body": "$util.escapeJavaScript($input.body).replaceAll("\\'", "'")",
                       "shopify_hmac": "$input.params('X-Shopify-Hmac-Sha256')"
                     }
                 passthroughBehavior: never
@@ -183,7 +184,7 @@ Resources:
                   application/json: |
                     #set($inputRoot = $input.path('$'))
                     {
-                      "body": $input.body,
+                      "body": "$util.escapeJavaScript($input.body).replaceAll("\\'", "'")",
                       "shopify_hmac": "$input.params('X-Shopify-Hmac-Sha256')"
                     }
                 passthroughBehavior: never
