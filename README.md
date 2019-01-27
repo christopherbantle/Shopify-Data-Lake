@@ -7,7 +7,8 @@ An AWS SAM application that allows you to capture Shopify cart and checkout even
 Given that, on average, two thirds of carts will be abandoned before being converted, there should be roughly three
 times more data points on what customers are adding to their carts relative to the number of data points on what
 customers are actually purchasing.  Thus, with cart data at your disposal, you can more quickly, and with greater
-confidence, identify changes in customer behaviour than if you were to rely soley on purchase data.
+confidence, identify changes in customer behaviour than if you were to rely soley on purchase data.  This is especially
+helpful for merchants with smaller volumes of sales.
 
 ## Architecture
 
