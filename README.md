@@ -1,19 +1,71 @@
 # Shopify Data Lake
 
-An AWS SAM project that will enable you to create an S3 data lake with your Shopify store's cart and checkout events.
+An AWS SAM application that allows you to capture Shopify cart and checkout events via webhooks, and save them to S3.
 
-The application works as follows:
+## Use Case
+
+Given that, on average, two thirds of carts will be abandoned before being converted, there should be roughly three
+times more data points on what customers are adding to their carts relative to the number of data points on what
+customers are actually purchasing.  Therefore, with cart data at your disposal, you can more quickly, and with greater
+confidence, identify changes in customer behaviour.
+
+## Architecture
 
 ![Diagram](architecture.png)
 
-Shopify sends events (in particular, `carts/create`, `carts/update`, `checkouts/create`, and `checkouts/update` events) 
-to an API Gateway endpoint.  API Gateway will then invoke a Lambda function asynchronously, and return a response
-to Shopify, without waiting for the results of the Lambda invocation.  The Lambda function will put the
-data into a Kinesis Firehose, from which it will be saved in batches to S3.
+Shopify will send webhook notifications (in particular, for the `carts/create`, `carts/update`, `checkouts/create`, 
+and `checkouts/update` events) to an API Gateway endpoint.  API Gateway will then invoke a Lambda function 
+asynchronously, returning a response to Shopify without waiting for the results of the Lambda invocation.  The Lambda 
+function will then put the data into a Kinesis Firehose (assuming the computed HMAC digest
+matches the digest supplied in the request).  Finally, the Kinesis Firehose will save the data to S3 in batches.
+
+Using a Kinesis Firehose to write data to S3, instead of having the data-receiving Lambda function write directly to S3, 
+will significantly reduce the number of put object operations.  In addition, this will provide the option to leverage 
+Kinesis to perform data transformation and format conversion.
+
+## Deployment
+
+Note that when you deploy the application, you must have already created the S3 bucket that will be used to store your 
+data.  Note also that the Kinesis Firehose is not configured to encrypt the data that it puts in S3, and so, in 
+order to have this data encrypted, you should enable default encryption on the bucket.
+
+### Build Lambda Artifacts
+
+```bash
+sam build --base-dir lambda_code
+```
+
+### Upload Artifacts to S3
+
+```bash
+sam package --s3-bucket <deployment bucket> --output-template-file .deployment/template.yml --s3-prefix shopify_data_lake
+```
+
+### Create Stack
+
+```bash
+sam deploy --template-file .deployment/template.yml --stack-name <stack name> --capabilities CAPABILITY_NAMED_IAM --parameter-overrides $(cat .deployment/parameters)
+```
+
+Note that `.deployment/parameters` should be of the format:
+
+```
+<parameter key>=<parameter value>
+...
+```
+
+### Configure Webhooks
+
+Configure the webhooks for the `carts/create`, `carts/update`, `checkouts/create`, and `checkouts/update` events, using
+either the admin section of your Shopify store, or via the Shopify API.  You can find the URL of your HTTP endpoint
+using the API Gateway console.  The base URL should have the format 
+`https://<random hash>.execute-api.<region>.amazonaws.com/prod`, where `/cart` is appended to form the URL for 
+cart notifications, and`/checkout` is appended to form the URL for checkout notifications.
 
 ## Query Data with Athena
 
-Note that some event attributes are omitted in the table creation.  For a description of all event attributes, see [here](https://help.shopify.com/en/api/reference/events/webhook). 
+Note that for simplicity, a number of the event attributes are omitted in the table creations.  You can 
+find all of the event attributes in [the Shopify documentation](https://help.shopify.com/en/api/reference/events/webhook). 
 
 ### Create Database for Shopify Events
 
@@ -112,66 +164,45 @@ INNER JOIN (
 ) b ON a.checkout_token = b.checkout_token AND a.update_time = b.last_update_time;
 ```
 
-# Deploy
+## Testing Locally
 
-Build artifacts.
+### Create Test Events and Environment Variables File
+
+The environment variables file should contain a mapping from logical resource id (e.g., 'HandleCartEventFunction')
+to key to value.  For example:
+
+```json
+{
+  "HandleCartEventFunction": {
+    "KINESIS_FIREHOSE": "<name of Kinesis Firehose for cart events>",
+    "SHOPIFY_AUTHENTICATION_KEY": "<key provided by Shopify to authenticate requests>"
+  },
+  "HandleCheckoutEventFunction": {
+    "KINESIS_FIREHOSE": "<name of Kinesis Firehose for checkout events>",
+    "SHOPIFY_AUTHENTICATION_KEY": "<key provided by Shopify to authenticate requests>"
+  }
+}
+```
+
+### Build Artifacts
 
 ```bash
 sam build --base-dir lambda_code
 ```
 
-Upload artifacts to S3.
-
-```bash
-sam package --s3-bucket <deployment bucket> --output-template-file .deployment/template.yml --s3-prefix shopify_data_lake
-```
-
-Create stack.
-
-```bash
-sam deploy --template-file .deployment/template.yml --stack-name <stack name> --capabilities CAPABILITY_NAMED_IAM --parameter-overrides $(cat .deployment/parameters)
-```
-
-Note that `.deployment/parameters` should be of the format:
-
-```
-<parameter key>=<parameter value>
-...
-```
-
-# Test Locally
-
-Build artifacts.
-
-```bash
-sam build --base-dir lambda_code
-```
-
-Run code.
+### Perform Single Invocation
 
 ```bash
 sam local invoke --event .test/events/authentic_request.json --env-vars .test/env_vars.json HandleCartEventFunction
 ```
 
-For multiple tests, run:
+### Perform Multiple Invocations
 
 ```bash
 sam local start-lambda --env-vars .test/env_vars.json
-```
-
-Invoke:
-
-```bash
 aws lambda invoke --function-name HandleCartEventFunction --endpoint-url http://127.0.0.1:3001 --no-verify-ssl --payload "$(cat .test/events/authentic_request.json)" /dev/null
 aws lambda invoke --function-name HandleCartEventFunction --endpoint-url http://127.0.0.1:3001 --no-verify-ssl --payload "$(cat .test/events/digest_does_not_match.json)" /dev/null
 aws lambda invoke --function-name HandleCartEventFunction --endpoint-url http://127.0.0.1:3001 --no-verify-ssl --payload "$(cat .test/events/invalid_request.json)" /dev/null
 ```
 
-Logs will show up in terminal where Lambda was started.
-
-# TODO: Make less specific to my environment
-
-Environment variables file contains a mapping from Lambda function logical resource id (e.g., 'HandleCartEventFunction')
-to key to value.
-
-# Overview of Design
+The logs for the invocations will show up in the terminal session where the local Lambda container was started.
