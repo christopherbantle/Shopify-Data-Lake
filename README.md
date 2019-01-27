@@ -14,7 +14,7 @@ confidence, identify changes in customer behaviour than if you were to rely sole
 ![Diagram](architecture.png)
 
 Shopify will send webhook notifications (in particular, for the `carts/create`, `carts/update`, `checkouts/create`, 
-and `checkouts/update` events) to an API Gateway endpoint.  API Gateway will then invoke a Lambda function 
+and `checkouts/update` events) to an API Gateway endpoint.  API Gateway will invoke a Lambda function 
 asynchronously, returning a response to Shopify without waiting for the results of the Lambda invocation.  The Lambda 
 function will then put the data into a Kinesis Firehose (assuming the computed HMAC digest
 matches the digest supplied in the request).  Finally, the Kinesis Firehose will save the data to S3 in batches.
