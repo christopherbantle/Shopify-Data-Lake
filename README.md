@@ -167,7 +167,7 @@ INNER JOIN (
 
 ## Testing Locally
 
-### Create Test Events and Environment Variables File
+### Create Test Events and Environment Variable Files
 
 The environment variables file should contain a mapping from logical resource id (e.g., 'HandleCartEventFunction')
 to key to value.  For example:
