@@ -63,7 +63,7 @@ using the API Gateway console.  The base URL should have the format
 `https://<random hash>.execute-api.<region>.amazonaws.com/prod`, where `/cart` is appended to form the URL for 
 cart notifications, and`/checkout` is appended to form the URL for checkout notifications.
 
-## 4. Testing Locally
+## 4. Test Locally
 
 ### Create Test Events and Environment Variable Files
 
