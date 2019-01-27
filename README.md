@@ -191,13 +191,13 @@ to key to value.  For example:
 sam build --base-dir lambda_code
 ```
 
-### Perform Single Invocation
+### Single Invocation
 
 ```bash
 sam local invoke --event .test/events/authentic_request.json --env-vars .test/env_vars.json HandleCartEventFunction
 ```
 
-### Perform Multiple Invocations
+### Multiple Invocations
 
 ```bash
 sam local start-lambda --env-vars .test/env_vars.json
