@@ -21,7 +21,7 @@ matches the digest supplied in the request).  Finally, the Kinesis Firehose will
 
 Using a Kinesis Firehose to write data to S3, instead of having the data-receiving Lambda function write directly to S3, 
 will significantly reduce the number of put object operations.  In addition, this will provide the option to leverage 
-Kinesis to perform data transformation and format conversion.
+the Firehose for data transformations, or data format conversion.
 
 ## Deployment
 
