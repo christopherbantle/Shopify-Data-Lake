@@ -27,7 +27,7 @@ the Firehose for data transformations, or data format conversion.
 
 Note that when you deploy the application, you must have already created the S3 bucket that will be used to store your 
 data.  Note also that the Kinesis Firehose is not configured to encrypt the data that it puts in S3, and so, in 
-order to have this data encrypted, you should enable default encryption on the bucket.
+order to have this data encrypted, you should enable default encryption on the bucket, or modify the configuration of the Firehose.
 
 ### Build Lambda Artifacts
 
