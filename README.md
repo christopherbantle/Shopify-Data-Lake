@@ -2,7 +2,7 @@
 
 An AWS SAM application that allows you to capture Shopify cart and checkout events via webhooks, and save them to S3.
 
-## Use Case
+## 1. Use Case
 
 Given that, on average, two thirds of carts will be abandoned before being converted, there should be roughly three
 times more data points on what customers are adding to their carts relative to the number of data points on what
@@ -10,7 +10,7 @@ customers are actually purchasing.  Thus, with cart data at your disposal, you c
 confidence, identify changes in customer behaviour than if you were to rely soley on purchase data.  This is especially
 helpful for merchants with smaller volumes of sales.
 
-## Architecture
+## 2. Architecture
 
 ![Diagram](architecture.png)
 
@@ -24,7 +24,7 @@ Using a Kinesis Firehose to write data to S3, instead of having the data-receivi
 will significantly reduce the number of put object operations.  In addition, this will provide the option to leverage 
 the Firehose for data transformations, or data format conversion.
 
-## Deployment
+## 3. Deployment
 
 Note that when you deploy the application, you must have already created the S3 bucket that will be used to store your 
 data.  Note also that the Kinesis Firehose is not configured to encrypt the data that it puts in S3, and so, in 
@@ -63,7 +63,50 @@ using the API Gateway console.  The base URL should have the format
 `https://<random hash>.execute-api.<region>.amazonaws.com/prod`, where `/cart` is appended to form the URL for 
 cart notifications, and`/checkout` is appended to form the URL for checkout notifications.
 
-## Query Data with Athena
+## 4. Testing Locally
+
+### Create Test Events and Environment Variable Files
+
+The environment variables file should contain a mapping from logical resource id (e.g., 'HandleCartEventFunction')
+to key to value.  For example:
+
+```json
+{
+  "HandleCartEventFunction": {
+    "KINESIS_FIREHOSE": "<name of Kinesis Firehose for cart events>",
+    "SHOPIFY_AUTHENTICATION_KEY": "<key provided by Shopify to authenticate requests>"
+  },
+  "HandleCheckoutEventFunction": {
+    "KINESIS_FIREHOSE": "<name of Kinesis Firehose for checkout events>",
+    "SHOPIFY_AUTHENTICATION_KEY": "<key provided by Shopify to authenticate requests>"
+  }
+}
+```
+
+### Build Artifacts
+
+```bash
+sam build --base-dir lambda_code
+```
+
+### Single Invocation
+
+```bash
+sam local invoke --event .test/events/authentic_request.json --env-vars .test/env_vars.json HandleCartEventFunction
+```
+
+### Multiple Invocations
+
+```bash
+sam local start-lambda --env-vars .test/env_vars.json
+aws lambda invoke --function-name HandleCartEventFunction --endpoint-url http://127.0.0.1:3001 --no-verify-ssl --payload "$(cat .test/events/authentic_request.json)" /dev/null
+aws lambda invoke --function-name HandleCartEventFunction --endpoint-url http://127.0.0.1:3001 --no-verify-ssl --payload "$(cat .test/events/digest_does_not_match.json)" /dev/null
+aws lambda invoke --function-name HandleCartEventFunction --endpoint-url http://127.0.0.1:3001 --no-verify-ssl --payload "$(cat .test/events/invalid_request.json)" /dev/null
+```
+
+The logs for the invocations will show up in the terminal session where the local Lambda container was started.
+
+## 5. Query Data with Athena
 
 Note that for simplicity, a number of the event attributes are omitted in the table creations.  You can 
 find all of the event attributes in [the Shopify documentation](https://help.shopify.com/en/api/reference/events/webhook). 
@@ -164,46 +207,3 @@ INNER JOIN (
     GROUP BY checkout_token
 ) b ON a.checkout_token = b.checkout_token AND a.update_time = b.last_update_time;
 ```
-
-## Testing Locally
-
-### Create Test Events and Environment Variable Files
-
-The environment variables file should contain a mapping from logical resource id (e.g., 'HandleCartEventFunction')
-to key to value.  For example:
-
-```json
-{
-  "HandleCartEventFunction": {
-    "KINESIS_FIREHOSE": "<name of Kinesis Firehose for cart events>",
-    "SHOPIFY_AUTHENTICATION_KEY": "<key provided by Shopify to authenticate requests>"
-  },
-  "HandleCheckoutEventFunction": {
-    "KINESIS_FIREHOSE": "<name of Kinesis Firehose for checkout events>",
-    "SHOPIFY_AUTHENTICATION_KEY": "<key provided by Shopify to authenticate requests>"
-  }
-}
-```
-
-### Build Artifacts
-
-```bash
-sam build --base-dir lambda_code
-```
-
-### Single Invocation
-
-```bash
-sam local invoke --event .test/events/authentic_request.json --env-vars .test/env_vars.json HandleCartEventFunction
-```
-
-### Multiple Invocations
-
-```bash
-sam local start-lambda --env-vars .test/env_vars.json
-aws lambda invoke --function-name HandleCartEventFunction --endpoint-url http://127.0.0.1:3001 --no-verify-ssl --payload "$(cat .test/events/authentic_request.json)" /dev/null
-aws lambda invoke --function-name HandleCartEventFunction --endpoint-url http://127.0.0.1:3001 --no-verify-ssl --payload "$(cat .test/events/digest_does_not_match.json)" /dev/null
-aws lambda invoke --function-name HandleCartEventFunction --endpoint-url http://127.0.0.1:3001 --no-verify-ssl --payload "$(cat .test/events/invalid_request.json)" /dev/null
-```
-
-The logs for the invocations will show up in the terminal session where the local Lambda container was started.
