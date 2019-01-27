@@ -17,7 +17,7 @@ Shopify will send webhook notifications (in particular, for the `carts/create`, 
 and `checkouts/update` events) to an API Gateway endpoint.  API Gateway will invoke a Lambda function 
 asynchronously, returning a response to Shopify without waiting for the results of the Lambda invocation.  The Lambda 
 function will then put the data into a Kinesis Firehose (assuming the computed HMAC digest
-matches the digest supplied in the request).  Finally, the Kinesis Firehose will save the data to S3 in batches.  There will be separate Lambda functions and Kinesis Firehoses for the cart and checkout data.
+matches the digest supplied in the request).  Finally, the Kinesis Firehose will save the data to S3 in batches.  There will be one Lambda functions and Kinesis Firehoses for the cart data, and another for the checkout data.
 
 Using a Kinesis Firehose to write data to S3, instead of having the data-receiving Lambda function write directly to S3, 
 will significantly reduce the number of put object operations.  In addition, this will provide the option to leverage 
