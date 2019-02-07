@@ -1,9 +1,9 @@
-import boto3
 import os
 import hmac
 import base64
 import hashlib
 import logging
+import boto3
 
 
 LOGGER = logging.getLogger(__name__)
@@ -16,13 +16,15 @@ def lambda_handler(event, context):
         LOGGER.warning(event)
         return
 
-    authentic_key_digest = hmac.HMAC(os.environ['SHOPIFY_AUTHENTICATION_KEY'].encode(),
-                                     event['body'].encode(),
-                                     hashlib.sha256).digest()
+    authentic_key_digest = hmac.HMAC(
+        os.environ['SHOPIFY_AUTHENTICATION_KEY'].encode(),
+        event['body'].encode(),
+        hashlib.sha256
+    ).digest()
     request_digest = base64.b64decode(event['shopify_hmac'])
 
     if not hmac.compare_digest(authentic_key_digest, request_digest):
-        LOGGER.warning('Computed digest does not match value of Shopift HMAC digest header')
+        LOGGER.warning('Computed digest does not match value of Shopify HMAC digest header')
         LOGGER.warning(event)
         return
 
